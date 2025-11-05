@@ -1,0 +1,143 @@
+#!/usr/bin/env python3
+"""
+setup_service_account.py
+Creates a Gmail-capable service account and outputs client ID for domain-wide delegation.
+"""
+import json
+import os
+import sys
+import warnings
+from pathlib import Path
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+
+# Suppress FutureWarning about Python version
+warnings.filterwarnings("ignore", category=FutureWarning, module="google.api_core._python_version_support")
+
+# === CONFIG ===
+PROJECT_ID = input("Enter your Google Cloud Project ID: ").strip()
+SA_NAME = "gmail-sender"
+SA_DISPLAY_NAME = "Gmail Sender (Python Automation)"
+KEY_FILE = "gmail_service_account.json"
+
+# Scopes needed for IAM + Gmail
+SCOPES = [
+    'https://www.googleapis.com/auth/iam',
+    'https://www.googleapis.com/auth/admin.directory.user.readonly'
+]
+
+print("\nCreating Service Account...")
+
+# Check for Application Default Credentials
+def check_adc():
+    """Check if Application Default Credentials are available"""
+    # Check for GOOGLE_APPLICATION_CREDENTIALS environment variable
+    if os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
+        if os.path.exists(os.getenv("GOOGLE_APPLICATION_CREDENTIALS")):
+            return True
+    
+    # Check if gcloud auth is available
+    try:
+        import subprocess
+        result = subprocess.run(['gcloud', 'auth', 'application-default', 'print-access-token'], 
+                              capture_output=True, text=True, timeout=10)
+        return result.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.SubprocessError):
+        return False
+
+# Use default credentials (gcloud auth or ADC)
+creds = None
+if os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
+    try:
+        creds = service_account.Credentials.from_service_account_file(
+            os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        )
+        print("✓ Using service account file from GOOGLE_APPLICATION_CREDENTIALS")
+    except Exception as e:
+        print(f"✗ Error loading service account file: {e}")
+
+if not creds and check_adc():
+    try:
+        # Try to get ADC credentials
+        from google.auth import default
+        creds, project = default()
+        print("✓ Using Application Default Credentials")
+    except Exception as e:
+        print(f"✗ Error loading ADC: {e}")
+
+if not creds:
+    print("\n" + "="*60)
+    print("ERROR: No valid credentials found!")
+    print("="*60)
+    print("\nTo fix this, run one of the following commands:")
+    print("\n1. Set up Application Default Credentials:")
+    print("   gcloud auth application-default login")
+    print("\n2. Or set GOOGLE_APPLICATION_CREDENTIALS environment variable:")
+    print("   export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json")
+    print("\n3. Or authenticate with gcloud:")
+    print("   gcloud auth login")
+    print("   gcloud auth application-default login")
+    print("="*60)
+    sys.exit(1)
+
+try:
+    iam_service = build('iam', 'v1', credentials=creds)
+    print("✓ IAM service initialized successfully")
+except Exception as e:
+    print(f"✗ Failed to initialize IAM service: {e}")
+    sys.exit(1)
+
+# 1. Create Service Account
+sa_email = f"{SA_NAME}@{PROJECT_ID}.iam.gserviceaccount.com"
+try:
+    print(f"Creating service account: {sa_email}")
+    request = iam_service.projects().serviceAccounts().create(
+        name=f"projects/{PROJECT_ID}",
+        body={
+            "accountId": SA_NAME,
+            "serviceAccount": {
+                "displayName": SA_DISPLAY_NAME
+            }
+        }
+    )
+    sa = request.execute()
+    print(f"✓ Service Account created: {sa['email']}")
+except Exception as e:
+    if "already exists" in str(e).lower():
+        print(f"✓ Service Account already exists: {sa_email}")
+    else:
+        print(f"✗ Failed to create service account: {e}")
+        sys.exit(1)
+
+# 2. Generate Key
+try:
+    print("Generating service account key...")
+    key_request = iam_service.projects().serviceAccounts().keys().create(
+        name=f"projects/{PROJECT_ID}/serviceAccounts/{sa_email}",
+        body={}
+    )
+    key = key_request.execute()
+    key_data = json.loads(key['privateKeyData'])
+    
+    with open(KEY_FILE, 'w') as f:
+        json.dump(key_data, f, indent=2)
+    print(f"✓ Private key saved: {KEY_FILE}")
+except Exception as e:
+    print(f"✗ Key generation failed: {e}")
+    sys.exit(1)
+
+# 3. Extract Client ID
+client_id = key_data['client_id']
+print(f"\n" + "="*60)
+print("SETUP COMPLETE!")
+print("="*60)
+print(f"\nCLIENT ID (copy this): {client_id}")
+print(f"\nNEXT STEPS:")
+print(f"1. Go to: https://admin.google.com")
+print(f"2. Navigate to: Security → API Controls → Manage Domain-wide Delegation")
+print(f"3. Click: 'Add new'")
+print(f"4. Paste Client ID: {client_id}")
+print(f"5. Add scope: https://mail.google.com/")
+print(f"6. Click: 'Authorize'")
+print(f"\nAfter completing the above, you can run: python send_email_sa.py")
+print("="*60)
