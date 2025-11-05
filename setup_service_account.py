@@ -63,7 +63,6 @@ def exit_with_permission_denied(project_id):
     exit(1)
 
 print(f"\nUsing Google Cloud Project: {PROJECT_ID}")
-print("\nCreating Service Account...")
 
 try:
     creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
@@ -77,6 +76,22 @@ if not creds.valid:
     print("Application Default Credentials are invalid. Run: gcloud auth application-default login")
     exit(1)
 
+print("\nEnabling required APIs...")
+serviceusage = build('serviceusage', 'v1', credentials=creds)
+try:
+    for api in ['iam.googleapis.com']:
+        print(f"Enabling {api}...")
+        serviceusage.services().enable(
+            name=f"projects/{PROJECT_ID}/services/{api}"
+        ).execute()
+        print(f"Enabled {api}")
+except HttpError as e:
+    if e.resp.status == 403:
+        exit_with_permission_denied(PROJECT_ID)
+    print(f"Warning: Could not enable APIs automatically: {e}")
+    print("You may need to enable them manually.")
+
+print("\nCreating Service Account...")
 iam_service = build('iam', 'v1', credentials=creds)
 
 # 1. Create Service Account
