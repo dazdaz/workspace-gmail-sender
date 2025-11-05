@@ -87,7 +87,13 @@ try:
         print(f"Enabled {api}")
 except HttpError as e:
     if e.resp.status == 403:
-        exit_with_permission_denied(PROJECT_ID)
+        console_url = f"https://console.developers.google.com/apis/api/iam.googleapis.com/overview?project={PROJECT_ID}"
+        print(f"\nWarning: Cannot enable APIs automatically due to insufficient permissions.")
+        print(f"Please enable the IAM API manually:")
+        print(f"  1. Visit: {console_url}")
+        print(f"  2. Click 'Enable API'")
+        print(f"  3. Re-run this script\n")
+        exit(1)
     print(f"Warning: Could not enable APIs automatically: {e}")
     print("You may need to enable them manually.")
 
