@@ -11,6 +11,7 @@ Usage:
     Command-line mode:
         python send_email_sa.py -f sender@domain.com -t recipient@example.com -s "Subject" -b "Body"
         python send_email_sa.py --from sender@domain.com --to recipient@example.com --subject "Test" --body "Message"
+        python send_email_sa.py -f sender@domain.com -t recipient@example.com -s "Subject" --body-file message.txt
 """
 import argparse
 import base64
@@ -179,9 +180,13 @@ Examples:
   Interactive mode:
     python send_email_sa.py
 
-  Command-line mode:
+  Command-line mode with inline body:
     python send_email_sa.py -f sender@domain.com -t recipient@example.com -s "Subject" -b "Body"
     python send_email_sa.py --from sender@domain.com --to recipient@example.com --subject "Test" --body "Message"
+
+  Command-line mode with body from file:
+    python send_email_sa.py -f sender@domain.com -t recipient@example.com -s "Subject" --body-file message.txt
+    python send_email_sa.py --from sender@domain.com --to recipient@example.com --subject "Newsletter" --body-file newsletter.txt
         """
     )
     
@@ -211,6 +216,12 @@ Examples:
         help='Email body text'
     )
     
+    parser.add_argument(
+        '--body-file',
+        metavar='FILE',
+        help='Read email body from a text file'
+    )
+    
     return parser.parse_args()
 
 def main():
@@ -223,7 +234,7 @@ def main():
         sys.exit(1)
     
     # Determine if using command-line mode or interactive mode
-    if args.sender or args.recipient or args.subject or args.body:
+    if args.sender or args.recipient or args.subject or args.body or args.body_file:
         # Command-line mode: at least one argument provided
         # Validate that all required arguments are present
         if not args.sender:
@@ -233,10 +244,30 @@ def main():
             print("Error: --to is required when using command-line mode")
             sys.exit(1)
         
+        # Check that --body and --body-file are not both specified
+        if args.body and args.body_file:
+            print("Error: Cannot specify both --body and --body-file")
+            sys.exit(1)
+        
         impersonate_user = args.sender
         recipient = args.recipient
         subject = args.subject or "Test from Service Account"
-        body = args.body or "Hello! This email was sent via Service Account + Domain-Wide Delegation."
+        
+        # Handle body content
+        if args.body_file:
+            # Read body from file
+            try:
+                with open(args.body_file, 'r', encoding='utf-8') as f:
+                    body = f.read()
+                print(f"✓ Read email body from file: {args.body_file}")
+            except FileNotFoundError:
+                print(f"Error: Body file not found: {args.body_file}")
+                sys.exit(1)
+            except Exception as e:
+                print(f"Error reading body file: {e}")
+                sys.exit(1)
+        else:
+            body = args.body or "Hello! This email was sent via Service Account + Domain-Wide Delegation."
         
         print("\n" + "="*60)
         print("GMAIL WORKSPACE SERVICE ACCOUNT EMAIL SENDER")

@@ -141,6 +141,21 @@ python send_email_sa.py -f sender@domain.com -t recipient@example.com
 - `-t, --to EMAIL`: Recipient email address (required in CLI mode)
 - `-s, --subject TEXT`: Email subject line (optional, defaults to "Test from Service Account")
 - `-b, --body TEXT`: Email body text (optional, defaults to standard message)
+- `--body-file FILE`: Read email body from a text file (cannot be used with `-b`)
+
+**Using body from a file:**
+```bash
+# Create a message file
+echo "Hello,
+
+This is a multi-line email message.
+It can contain as much text as needed.
+
+Best regards" > message.txt
+
+# Send email with body from file
+python send_email_sa.py -f sender@domain.com -t recipient@example.com -s "Subject" --body-file message.txt
+```
 
 **For help:**
 ```bash
