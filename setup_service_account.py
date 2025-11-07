@@ -165,9 +165,9 @@ except Exception as e:
 client_id = key_data['client_id']
 print(f"\nCLIENT ID (copy this): {client_id}")
 print(f"\nACTION REQUIRED:")
-print(f"   Go to: https://admin.google.com → Security → API Controls → Manage Domain-wide Delegation")
+print(f"   Go to: https://admin.google.com/ac/owl/domainwidedelegation → Or goto Security → API Controls → Manage Domain-wide Delegation")
 print(f"   Click 'Add new' → Paste Client ID: {client_id}")
-print(f"   Scopes: https://mail.google.com/")
+print(f"   OAuth Scopes: https://mail.google.com/")
 print(f"   Save.")
 
 print(f"\nSetup complete. Use send_email_sa.py next.")
