@@ -26,7 +26,7 @@ from email.mime.multipart import MIMEMultipart
 warnings.filterwarnings("ignore", category=FutureWarning, module="google.api_core._python_version_support")
 
 from aiosmtpd.controller import Controller
-from aiosmtpd.smtp import SMTP, Envelope, Session
+from aiosmtpd.smtp import SMTP as SMTPServer, Envelope, Session
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
@@ -88,6 +88,11 @@ class GmailSMTPHandler:
         except Exception as e:
             return False, str(e)
     
+    async def handle_exception(self, error):
+        """Silently handle exceptions for malformed/unrecognised commands (e.g., HTTP requests)"""
+        # Ignore HTTP requests hitting SMTP port - don't log them
+        pass
+    
     async def handle_RCPT(self, server, session, envelope, address, rcpt_options):
         """Handle RCPT TO command"""
         envelope.rcpt_tos.append(address)
@@ -129,11 +134,25 @@ class GmailSMTPHandler:
             return f'550 Failed to send: {result}'
 
 
+class QuietSMTP(SMTPServer):
+    """Custom SMTP server that suppresses unrecognised command logging"""
+    async def smtp_UNRECOGNISED(self, arg):
+        """Silently handle unrecognised commands (like HTTP POST hitting SMTP port)"""
+        # Don't print anything, just return error to client
+        return '500 Command not recognised'
+
+
+class QuietController(Controller):
+    """Custom Controller that uses QuietSMTP to suppress unrecognised command logs"""
+    def factory(self):
+        return QuietSMTP(self.handler)
+
+
 def run_server(host, port, allowed_domain=None):
     """Start the SMTP proxy server"""
     handler = GmailSMTPHandler(allowed_domain=allowed_domain)
     
-    controller = Controller(
+    controller = QuietController(
         handler,
         hostname=host,
         port=port,
@@ -169,9 +188,11 @@ def run_server(host, port, allowed_domain=None):
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
     
-    # Keep running
+    # Keep running - use new_event_loop() to avoid deprecation warning
     try:
-        asyncio.get_event_loop().run_forever()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_forever()
     except KeyboardInterrupt:
         pass
     finally:
